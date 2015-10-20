@@ -9,21 +9,25 @@ namespace amima {
 	class Config {
 		public:
 			double unit_time_;
+			double unit_time_nn;
 
 			double viscosity_coefficient_;
 
 			ofColor neural_node_;
 			ofColor neural_edge_;
+			int initial_neural_node_number_;
 			double neural_edge_damper_;
 			double neural_edge_spring_;
 			double neural_node_radius_;
 
-			Config(){
+			Config():initial_neural_node_number_(1500){
 				unit_time_ = 1.0/300.0;
-				viscosity_coefficient_ = 1.0;
+				unit_time_nn = 1.0/100.0;
+				viscosity_coefficient_ = 0.1;
 				double h = ofMap(20,0,260,0,255);
 				neural_node_.setHsb(h,0,200);
 				neural_edge_.setHsb(h,0,200);
+				// int initial_neural_node_number_ = 10;
 				neural_edge_spring_ = 20;
 				neural_edge_damper_ = 10;
 				neural_node_radius_ = 2;
@@ -47,7 +51,7 @@ namespace amima {
 			double v_;
 			double w_;
 			double unit_time_;
-			FitzHughNagumoModel(double v_0 = 1.1, double w_0 = 1.1, double unit_time = 1.0):v_(v_0),w_(w_0),unit_time_(unit_time){
+			FitzHughNagumoModel(double v_0 = -1.9, double w_0 = -1.5, double unit_time = 1.0):v_(v_0),w_(w_0),unit_time_(unit_time){
 			
 			};
 			
@@ -112,7 +116,7 @@ namespace amima {
 			double sum_;
 			bool is_static_;
 			
-			NeuralNode(Config& config):BaseNode(config),activation_function_(1.1,1.1,config_.unit_time_*10.0),is_static_(false),sum_(0){};
+			NeuralNode(Config& config):BaseNode(config),activation_function_(1.1,1.1,config_.unit_time_nn*10.0),is_static_(false),sum_(0){};
 
 			virtual ~NeuralNode(){};
 			
@@ -120,7 +124,7 @@ namespace amima {
 			
 			void draw()const override{
 				ofSetColor(config_.NeuralColor(activation_function_.v_));
-				ofDrawSphere(position()[0],position()[1],position()[2],2);
+				// ofDrawSphere(position()[0],position()[1],position()[2],2);
 			}
 
 	};
@@ -203,9 +207,9 @@ namespace amima {
 		if (is_static_) {
 			activation_function_.update(sum_);
 		}else{
-			double sum_ = 0;
+			sum_ = 0.0;
 			for (auto&& edge : froms_) {
-				sum_ += edge->from_->activation_function_.v_;
+				sum_ += edge->from_->activation_function_.v_ * edge->weight_;
 			}
 			activation_function_.update(sum_);
 		}
@@ -253,10 +257,10 @@ namespace amima {
 
 		};
 
-		std::shared_ptr<NeuralNode> add_node_from(Type type, double length, std::shared_ptr<NeuralNode> from, double weight = 1.0){
+		std::shared_ptr<NeuralNode> add_node_from(Type type, double length, std::shared_ptr<NeuralNode> from, double weight = 1.2){
 			if (type == Type::Neuron) {
 				std::shared_ptr<NeuralNode> new_neural_node = add_node(type);
-				nodes_.push_back(new_neural_node);
+				new_neural_node->particle_.position_ = from->particle_.position_+ Eigen::Vector3d(ofRandom(-1.0,1.0),ofRandom(-1.0,1.0),ofRandom(-1.0,1.0)) * length;
 				add_edge(type, length, from, new_neural_node, weight);
 				return new_neural_node;
 			}
@@ -297,8 +301,7 @@ namespace amima {
 		
 		void expand(){
 			for (auto&& node : nodes_) {
-				double spring = ( node->froms_.size() + node->tos_.size() )*0.1 ;
-				std::cout<<node->froms_.size() + node->tos_.size()<<std::endl;
+				double spring = ( node->froms_.size() + node->tos_.size() )*0.8 ;
 				if (node->froms_.size() + node->tos_.size() >= 2) {
 					Eigen::Vector3d current_position = node->particle_.position_;
 					Eigen::Vector3d positions_sum(0,0,0);
@@ -364,12 +367,12 @@ namespace amima {
 		public:
 		
 		void update(){
-			for (int i = 0; i < 10; i++) {
+			// for (int i = 0; i < 10; i++) {
 				// for (int j = 0; j < 10; j++) {
 				update_neuron();
 				// }
 				update_physics();
-			}
+			// }
 		};
 
 		void draw()const{
@@ -382,6 +385,142 @@ namespace amima {
 			}
 		}
 	};
+
+	class MeshGenerator {
+		Config& config_;
+		World& world_;
+		
+		public:
+		MeshGenerator(Config& config, World& world):config_(config), world_(world){};
+		
+		virtual ~MeshGenerator(){};
+		
+		void generate_node(std::vector<std::shared_ptr<amima::NeuralNode>> roots){
+			for (auto&& root : roots) {
+				std::vector<std::shared_ptr<amima::NeuralNode>> tmp;
+				std::cout<<"current_nodes : "<<world_.nodes_.size()<<std::endl;
+				if (world_.nodes_.size() < config_.initial_neural_node_number_) {
+					tmp.push_back(world_.add_node_from(amima::Type::Neuron, 20.0, root));
+					std::cout<<tmp.size()<<std::endl;	
+					if (ofRandom(0.0,1.0)>0.8) {
+						for (int i = 0; i < ofRandom(0,5); i++) {
+							tmp.push_back(world_.add_node_from(amima::Type::Neuron, 20.0, root));
+						}
+					}
+				}
+				generate_node(tmp);
+			}
+				// if (world_.nodes_.size() < config_.initial_neural_node_number_) {
+				// 	return generate_node();
+				// }
+		}
+
+		void setup(){
+			std::vector<std::shared_ptr<amima::NeuralNode>> tmp;
+			std::shared_ptr<amima::NeuralNode> node_start = world_.add_node(amima::Type::Neuron);
+			tmp.push_back(node_start);
+			generate_node(tmp);
+			std::cout<<"nodes : "<<config_.initial_neural_node_number_<<std::endl;
+			
+			std::vector<std::shared_ptr<amima::NeuralNode>> leef;
+			for (auto&& node : world_.nodes_) {
+				if(node->tos_.size() == 0){
+					leef.push_back(node);
+				}
+			}
+			for (auto&& node : leef) {
+				if (ofRandom(0.0,1.0)>0.5) {
+					int target_index = ofRandom(0,world_.nodes_.size());
+					std::cout<<"target_index : "<<target_index<<std::endl;
+					if (target_index >= 0) {
+						world_.add_edge(amima::Type::Neuron, 20.0, node, world_.nodes_[target_index]);
+
+					}
+				}
+				
+			}
+			// for (int i = 0; i < config_.initial_neural_node_number_; i++) {
+			// 	world_.add_node(amima::Type::Neuron);
+			// }
+			//
+			// for (int i = 0; i < config_.initial_neural_node_number_; i++) {
+			// 	for (int j = 0; j < config_.initial_neural_node_number_; j++) {
+			// 		if (i < j) {
+			// 				world_.add_edge(amima::Type::Neuron, 20.0, world_.nodes_[i], world_.nodes_[j]);
+			// 		}
+			// 	}
+			// }
+			
+			// std::shared_ptr<amima::NeuralNode> node1 = world_.add_node(amima::Type::Neuron);
+			
+			
+			if (world_.nodes_.size()>0) {
+				world_.nodes_[0]->particle_.b_static_ = true;
+				world_.nodes_[0]->is_static_ = true;
+			}
+			
+			// std::shared_ptr<amima::NeuralNode> node1 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node2 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node3 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node4 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node5 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node6 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node7 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node8 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node9 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node10 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node11 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node12 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node13 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node14 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node15 = world_.add_node(amima::Type::Neuron);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node1, node2);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node2, node3);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node3, node4);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node4, node5);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node5, node6);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node6, node7);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node7, node8);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node8, node9);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node9, node10);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node10, node11);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node11, node12);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node12, node13);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node13, node14);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node14, node15);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node15, node2);
+			// // node2->particle_.b_static_ = true;
+			// node1->is_static_ = true;
+			//
+			// std::shared_ptr<amima::NeuralNode> node16 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node17 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node18 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node19 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node20 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node21 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node22 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node23 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node24 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node25 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node26 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node27 = world_.add_node(amima::Type::Neuron);
+			// std::shared_ptr<amima::NeuralNode> node28 = world_.add_node(amima::Type::Neuron);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node4, node17);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node17, node18);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node6, node19);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node19, node20);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node8, node21);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node21, node22);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node10, node23);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node23, node24);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node25, node12);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node26, node25);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node14, node27);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node27, node28);
+			// world_.add_edge(amima::Type::Neuron, 20.0, node18, node25);
+		};
+	};
+	
 } // namespace amima
 
 class ofApp : public ofBaseApp{
@@ -417,65 +556,8 @@ class ofApp : public ofBaseApp{
 
 		void setup_world(){
 			world_.setup();
-			std::shared_ptr<amima::NeuralNode> node1 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node2 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node3 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node4 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node5 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node6 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node7 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node8 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node9 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node10 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node11 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node12 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node13 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node14 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node15 = world_.add_node(amima::Type::Neuron);
-			world_.add_edge(amima::Type::Neuron, 20.0, node1, node2);
-			world_.add_edge(amima::Type::Neuron, 20.0, node2, node3);
-			world_.add_edge(amima::Type::Neuron, 20.0, node3, node4);
-			world_.add_edge(amima::Type::Neuron, 20.0, node4, node5);
-			world_.add_edge(amima::Type::Neuron, 20.0, node5, node6);
-			world_.add_edge(amima::Type::Neuron, 20.0, node6, node7);
-			world_.add_edge(amima::Type::Neuron, 20.0, node7, node8);
-			world_.add_edge(amima::Type::Neuron, 20.0, node8, node9);
-			world_.add_edge(amima::Type::Neuron, 20.0, node9, node10);
-			world_.add_edge(amima::Type::Neuron, 20.0, node10, node11);
-			world_.add_edge(amima::Type::Neuron, 20.0, node11, node12);
-			world_.add_edge(amima::Type::Neuron, 20.0, node12, node13);
-			world_.add_edge(amima::Type::Neuron, 20.0, node13, node14);
-			world_.add_edge(amima::Type::Neuron, 20.0, node14, node15);
-			world_.add_edge(amima::Type::Neuron, 20.0, node15, node2);
-			// node2->particle_.b_static_ = true;
-			node1->is_static_ = true;
-			
-			std::shared_ptr<amima::NeuralNode> node16 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node17 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node18 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node19 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node20 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node21 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node22 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node23 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node24 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node25 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node26 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node27 = world_.add_node(amima::Type::Neuron);
-			std::shared_ptr<amima::NeuralNode> node28 = world_.add_node(amima::Type::Neuron);
-			world_.add_edge(amima::Type::Neuron, 20.0, node4, node17);
-			world_.add_edge(amima::Type::Neuron, 20.0, node17, node18);
-			world_.add_edge(amima::Type::Neuron, 20.0, node6, node19);
-			world_.add_edge(amima::Type::Neuron, 20.0, node19, node20);
-			world_.add_edge(amima::Type::Neuron, 20.0, node8, node21);
-			world_.add_edge(amima::Type::Neuron, 20.0, node21, node22);
-			world_.add_edge(amima::Type::Neuron, 20.0, node10, node23);
-			world_.add_edge(amima::Type::Neuron, 20.0, node23, node24);
-			world_.add_edge(amima::Type::Neuron, 20.0, node25, node12);
-			world_.add_edge(amima::Type::Neuron, 20.0, node26, node25);
-			world_.add_edge(amima::Type::Neuron, 20.0, node14, node27);
-			world_.add_edge(amima::Type::Neuron, 20.0, node27, node28);
-			world_.add_edge(amima::Type::Neuron, 20.0, node18, node25);
+			amima::MeshGenerator mesh_generator(config_, world_);
+			mesh_generator.setup();
 		}
 
 		void setup(){
@@ -485,8 +567,10 @@ class ofApp : public ofBaseApp{
 		};
 
 		void update(){
-			mg->addPoint(world_.nodes_[1]->activation_function_.v_);
-			logs_[255] = world_.nodes_[1]->activation_function_.v_;
+			mg->addPoint(world_.nodes_[10]->activation_function_.v_);
+			logs_[255] = world_.nodes_[10]->activation_function_.v_;
+			// std::cout<<"v : "<<world_.nodes_[10]->activation_function_.v_<<std::endl;
+			// std::cout<<"w : "<<world_.nodes_[10]->activation_function_.w_<<std::endl;
 			for(int i = 1; i < 256; i++) {
 				logs_[i-1] = logs_[i];
 			}
