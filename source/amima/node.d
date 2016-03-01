@@ -1,10 +1,10 @@
 module amima.node;
+import amima.edge;
+import amima.activation;
 
 /++
 +/
 class Node(T)if(__traits(isFloating, T)){
-	import amima.edge;
-	import amima.activation;
 	public{
 		Edge!(T)[] _fromEdges;
 		Edge!(T)[] _toEdges;

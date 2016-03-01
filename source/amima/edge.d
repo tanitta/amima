@@ -1,24 +1,21 @@
 module amima.edge;
 
+import amima.node;
 /++
 +/
 class Edge(T)if(__traits(isFloating, T)){
-	import amima.node;
 	public{
-		this(Node!T fromNode, Node!T toNode){
-			_fromNode = fromNode;
-			_toNode= toNode;
+		this(Node!(T) from, Node!(T) to){
+			_fromNode = from;
+			_toNode = to;
 		}
 		///
-		@property
 		const(Node!T) fromNode()const{return _fromNode;}
 		
 		///
-		@property
 		const(Node!T) toNode()const{return _toNode;}
 		
 		///
-		@property
 		T weight()const{return _weight;}
 	}//public
 
