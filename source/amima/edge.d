@@ -1,6 +1,7 @@
 module amima.edge;
 
 import amima.node;
+
 /++
 +/
 class Edge(T)if(__traits(isFloating, T)){

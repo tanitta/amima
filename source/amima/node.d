@@ -1,19 +1,19 @@
 module amima.node;
+
+import armos.math.vector:Vector;
 import amima.edge;
 import amima.activation;
-
 /++
 +/
 class Node(T)if(__traits(isFloating, T)){
+	alias V = Vector!(T, 3);
+	
 	public{
-		Edge!(T)[] _fromEdges;
-		Edge!(T)[] _toEdges;
-		
 		/++
 		+/
-		this(){
-			// _activationFunction = FitzHughNagumoModel!(T);
-			// _sum = T(0);
+		this(in V position){
+			_activationFunction = FitzHughNagumoModel!(T)();
+			_position = position;
 		}
 		
 		///
@@ -24,10 +24,14 @@ class Node(T)if(__traits(isFloating, T)){
 		@property
 		T w()const{return _activationFunction.w;}
 		
+		///
+		@property
+		V position()const{return _position;}
+		
 		/++
 		+/
 		void update(in T unitTime){
-			_sum = T(0);
+			T _sum = T(0);
 			foreach (fromEdge; _fromEdges) {
 				_sum += fromEdge.fromNode.v * fromEdge.weight;
 			}
@@ -36,8 +40,12 @@ class Node(T)if(__traits(isFloating, T)){
 	}//public
 
 	private{
-		T _sum;
 		FitzHughNagumoModel!(T) _activationFunction;
+		
+		Edge!(T)[] _fromEdges;
+		Edge!(T)[] _toEdges;
+		
+		V _position;
 	}//private
 }//class Node
 unittest{
